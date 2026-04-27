@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/miva_logo.png" alt="Miva Open University Logo" width="420"/>
+<img src="assets/miva_logo2.png" alt="Miva Open University Logo" width="420"/>
 
 <br/>
 <br/>
@@ -569,7 +569,7 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 **Built for Miva Open University · Academic Quality Assurance**
 
-<img src="assets/miva_logo.png" alt="Miva Open University" width="200"/>
+<img src="assets/miva_logo2.png" alt="Miva Open University" width="200"/>
 
 <br/>
 
