@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/miva_logo2.png" alt="Miva Open University Logo" width="220"/>
+<img src="assets/miva_logo2.png" alt="Miva Open University Logo" width="80"/>
 
 <br/>
 <br/>
