@@ -108,13 +108,9 @@ All adjustments are fully traceable, reversible within the session, and exportab
 
 ### Dashboard Overview - Tab 1
 
-> **📌 Screenshot placeholder**
-> *Replace this block with a screenshot of the Tab 1 KPI dashboard and distribution charts.*
->
-> Suggested filename: `docs/screenshots/tab1_dashboard.png`
-
 ```
-![Tab 1 – Dashboard Overview](docs/screenshots/tab1_dashboard.png)
+<img width="722" height="537" alt="image" src="https://github.com/user-attachments/assets/5cf01e5b-5ed9-467e-afb2-8dc61b94b4bc" />
+
 ```
 
 ---
