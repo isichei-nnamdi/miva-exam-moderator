@@ -748,11 +748,11 @@ with tab1:
             df_graded = df[graded_mask]
             graded_count = graded_mask.sum()
 
-            # Calculate passed/failed based on score >= 40 threshold (only graded students)
+            # Calculate passed/failed based on score >= 30 threshold (only graded students)
             if SCORE:
                 score_numeric = pd.to_numeric(df_graded[SCORE], errors="coerce")
-                passed = (score_numeric >= 40).sum()
-                failed = (score_numeric < 40).sum()
+                passed = (score_numeric >= 30).sum()
+                failed = (score_numeric < 30).sum()
             else:
                 passed = None
                 failed = None
@@ -776,16 +776,16 @@ with tab1:
                 kpi("Total Students", f"{total:,}", "registered candidates", "n")
             with c2:
                 kpi(
-                    "Passed",
+                    "Scored above 50%",
                     f"{passed:,}" if passed is not None else "-",
-                    f"{passed / total * 100:.1f}% pass rate" if passed else "",
+                    f"{passed / total * 100:.1f}% scored above 30" if passed else "",
                     "s",
                 )
             with c3:
                 kpi(
-                    "Failed",
+                    "Scored below 50%",
                     f"{failed:,}" if failed is not None else "-",
-                    f"{failed / total * 100:.1f}% fail rate" if failed else "",
+                    f"{failed / total * 100:.1f}% scored below 30" if failed else "",
                     "d",
                 )
             with c4:
