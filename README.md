@@ -108,75 +108,42 @@ All adjustments are fully traceable, reversible within the session, and exportab
 
 ### Dashboard Overview - Tab 1
 
-```
 <img width="722" height="537" alt="image" src="https://github.com/user-attachments/assets/5cf01e5b-5ed9-467e-afb2-8dc61b94b4bc" />
-
-```
 
 ---
 
 ### Integrity Flagging & Score Adjustment - Tab 1
 
-> **📌 Screenshot placeholder**
-> *Replace this block with a screenshot of the Score Adjustment section showing the integrity threshold slider, flagged candidates table, and before/after histogram.*
->
-> Suggested filename: `docs/screenshots/tab1_adjustment.png`
+<img width="719" height="541" alt="image" src="https://github.com/user-attachments/assets/692bceab-bf9e-41c1-b737-9b4b524480ce" />
 
-```
-![Tab 1 – Score Adjustment](docs/screenshots/tab1_adjustment.png)
-```
 
 ---
 
 ### Field Configuration & Moderation Setup - Tab 2
 
-> **📌 Screenshot placeholder**
-> *Replace this block with a screenshot of the Tab 2 field configuration panel showing the four-step selector.*
->
-> Suggested filename: `docs/screenshots/tab2_config.png`
+<img width="716" height="539" alt="image" src="https://github.com/user-attachments/assets/56f988b0-e0f8-4895-adf5-83a4cea34428" />
 
-```
-![Tab 2 – Field Configuration](docs/screenshots/tab2_config.png)
-```
 
 ---
 
 ### Normality Analysis & Statistical Suggestion - Tab 2
 
-> **📌 Screenshot placeholder**
-> *Replace this block with a screenshot of the normality KPI panel, Q-Q plot, and the recommendation callout.*
->
-> Suggested filename: `docs/screenshots/tab2_normality.png`
+<img width="716" height="478" alt="image" src="https://github.com/user-attachments/assets/796445ea-5da9-41c9-ac92-cf97f26ca552" />
 
-```
-![Tab 2 – Normality Analysis](docs/screenshots/tab2_normality.png)
-```
 
 ---
 
 ### Band-Based Score Adjustment - Tab 2
 
-> **📌 Screenshot placeholder**
-> *Replace this block with a screenshot of the band-based adjustment panel showing 3–5 configured bands with their live KPI previews.*
->
-> Suggested filename: `docs/screenshots/tab2_band_adjustment.png`
+<img width="721" height="539" alt="image" src="https://github.com/user-attachments/assets/d3db29f4-d791-464a-b1b0-f32ff8617942" />
 
-```
-![Tab 2 – Band-Based Adjustment](docs/screenshots/tab2_band_adjustment.png)
-```
 
 ---
 
 ### Grade Distribution: Before vs After - Tab 2
 
-> **📌 Screenshot placeholder**
-> *Replace this block with a screenshot of the grouped grade distribution bar chart showing before/after counts per grade (A–F).*
->
-> Suggested filename: `docs/screenshots/tab2_grade_distribution.png`
+<img width="718" height="536" alt="image" src="https://github.com/user-attachments/assets/b73858a0-c983-4b39-8eb5-80d9f497f901" />
 
-```
-![Tab 2 – Grade Distribution](docs/screenshots/tab2_grade_distribution.png)
-```
 
 ---
 
