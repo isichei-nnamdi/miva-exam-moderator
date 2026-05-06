@@ -693,9 +693,10 @@ def _render_grade_comparison(
 # ═══════════════════════════════════════════════════════════════════════════
 #  TABS
 # ═══════════════════════════════════════════════════════════════════════════
-tab1, tab2 = st.tabs([
+tab1, tab2, tab3 = st.tabs([
     "📊  Result Analysis & Adjustment",
     "⚖️  Result Moderation",
+    "📋  Single File Moderation",
 ])
 
 
@@ -1832,3 +1833,493 @@ with tab2:
                         mime="text/csv",
                         key="t2_download_btn",
                     )
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  TAB 3 – Single File Moderation                                         │
+# └──────────────────────────────────────────────────────────────────────────┘
+with tab3:
+
+    # ── 3a. Upload ──────────────────────────────────────────────────────────
+    sec("Upload Grade Sheet")
+    sf_file = st.file_uploader(
+        "Drop or browse your grade sheet (CSV or Excel)",
+        type=["csv", "xlsx", "xls"],
+        key="t3_upload",
+    )
+
+    if sf_file is None:
+        st.markdown(
+            '<div class="callout">📁 Upload a single grade sheet above to begin. '
+            "The file should contain one row per student and numeric columns for each "
+            "assessment component (CA, quiz, assignment, exam score, etc.). You will "
+            "select which columns to include in the total score and which column to use "
+            "as the adjustment target.</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        sf_ck = f"_sf_{sf_file.name}_{sf_file.size}"
+        if sf_ck not in st.session_state:
+            raw_sf = read_upload(sf_file)
+            if raw_sf is not None:
+                raw_sf.columns = [c.strip() for c in raw_sf.columns]
+                st.session_state[sf_ck] = raw_sf
+
+        df_sf = st.session_state.get(sf_ck)
+
+        if df_sf is not None:
+
+            with st.expander("👁 Grade Sheet Preview"):
+                st.dataframe(df_sf.head(20), use_container_width=True, hide_index=True)
+                st.caption(f"{len(df_sf):,} rows · {len(df_sf.columns)} columns")
+
+            # ── 3b. Column selection ────────────────────────────────────────
+            sec("Column Configuration")
+            st.markdown(
+                '<div class="callout">'
+                "<strong>Step 1</strong> — Select all numeric columns that contribute to "
+                "the final score (CA, quizzes, assignments, exam, etc.). Their values will "
+                "be summed to compute <code>_total_score</code>. "
+                "<strong>Step 2</strong> — From those columns, choose one as the "
+                "<em>adjustment target</em>: this is the only column whose values will be "
+                "modified during the moderation steps below.</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown("<br/>", unsafe_allow_html=True)
+
+            num_sf = [
+                c for c in df_sf.columns
+                if pd.api.types.is_numeric_dtype(df_sf[c])
+            ]
+
+            if not num_sf:
+                st.error("⚠️ No numeric columns found in the uploaded grade sheet.")
+            else:
+                sc1, sc2 = st.columns(2)
+                with sc1:
+                    sf_agg_fields = st.multiselect(
+                        "① Assessment columns to SUM",
+                        options=num_sf,
+                        help="All selected columns are summed to produce _total_score.",
+                        key="t3_agg_fields",
+                    )
+                with sc2:
+                    sf_adj_field = st.selectbox(
+                        "② Adjustment target column",
+                        options=["— select —"] + (sf_agg_fields if sf_agg_fields else num_sf),
+                        help="Only this column is modified during moderation. Must be one of the selected columns above.",
+                        key="t3_adj_field",
+                    )
+
+                sf_cfg_ok = (
+                    len(sf_agg_fields) > 0
+                    and sf_adj_field not in ("", "— select —")
+                    and sf_adj_field in sf_agg_fields
+                )
+
+                if not sf_cfg_ok:
+                    if sf_agg_fields and sf_adj_field not in ("", "— select —") and sf_adj_field not in sf_agg_fields:
+                        st.markdown(
+                            '<div class="callout-warn">⚠️ The adjustment target must be '
+                            "one of the columns selected in Step 1.</div>",
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown(
+                            '<div class="callout">⚙️ Complete both column selections above, '
+                            "then click <strong>Compute Totals</strong>.</div>",
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    sf_run_btn = st.button(
+                        "🚀 Compute Totals & Analyse",
+                        type="primary",
+                        key="t3_run_btn",
+                    )
+                    sf_state_key = f"_sfmod_{sf_ck}_{'_'.join(sf_agg_fields)}_{sf_adj_field}"
+
+                    # ── 3c. Compute totals ────────────────────────────────────
+                    if sf_run_btn:
+                        df_sfm = df_sf.copy()
+                        sf_total_cols = list(dict.fromkeys(sf_agg_fields))
+                        df_sfm["_total_score"] = df_sfm[sf_total_cols].apply(
+                            lambda r: pd.to_numeric(r, errors="coerce").sum(), axis=1
+                        )
+                        st.session_state[sf_state_key] = {
+                            "df":          df_sfm,
+                            "original_df": df_sfm.copy(),
+                            "agg_fields":  sf_agg_fields,
+                            "adj_field":   sf_adj_field,
+                            "total_cols":  sf_total_cols,
+                        }
+
+                    if sf_state_key in st.session_state:
+                        sfm       = st.session_state[sf_state_key]
+                        df_sfm    = sfm["df"]
+                        sf_tcols  = sfm["total_cols"]
+                        sf_afld   = sfm["adj_field"]
+
+                        st.markdown(
+                            f'<div class="callout-success">✅ Totals computed for '
+                            f"<strong>{len(df_sfm):,}</strong> students across "
+                            f"<strong>{len(sf_agg_fields)}</strong> assessment columns. "
+                            f"Adjustment target: <code>{sf_afld}</code>.</div>",
+                            unsafe_allow_html=True,
+                        )
+
+                        # ── 3d. Grade Distribution (Pre-Adjustment) ───────────
+                        sec("Grade Distribution (Pre-Adjustment)")
+
+                        sf_grade_pre = (
+                            pd.to_numeric(df_sfm["_total_score"], errors="coerce")
+                            .apply(score_to_grade)
+                        )
+                        sf_grade_counts_pre = sf_grade_pre.value_counts()
+                        sf_total_n = len(sf_grade_pre)
+
+                        sf_grade_cols = st.columns(6)
+                        for col, letter in zip(sf_grade_cols, GRADE_ORDER):
+                            cnt = int(sf_grade_counts_pre.get(letter, 0))
+                            pct = f"{cnt / sf_total_n * 100:.1f}%" if sf_total_n else "—"
+                            with col:
+                                kpi(f"Grade {letter}", f"{cnt:,}", pct, GRADE_VARIANTS[letter])
+
+                        st.markdown("<br/>", unsafe_allow_html=True)
+                        st.markdown('<div class="chart-wrap">', unsafe_allow_html=True)
+                        st.plotly_chart(
+                            grade_bar_chart(
+                                sf_grade_pre,
+                                "Grade Distribution (Before Adjustment)",
+                            ),
+                            use_container_width=True,
+                            config={"displayModeBar": False},
+                        )
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                        # ── 3e. Normality Analysis ────────────────────────────
+                        sec("Total Score Distribution & Normality Analysis")
+                        sf_dist_l, sf_dist_r = st.columns([3, 1])
+                        sf_total_series = pd.to_numeric(df_sfm["_total_score"], errors="coerce")
+
+                        with sf_dist_l:
+                            sf_fig_dist = go.Figure()
+                            sf_fig_dist.add_trace(go.Histogram(
+                                x=sf_total_series.dropna(), nbinsx=30,
+                                marker_color=RED, opacity=0.82, name="Total Score",
+                            ))
+                            add_kde_trace(sf_fig_dist, sf_total_series)
+                            sf_fig_dist.update_layout(
+                                title="Total Score Distribution",
+                                xaxis_title="Total Score", yaxis_title="Count",
+                            )
+                            show_chart(sf_fig_dist)
+
+                            if sf_total_series.dropna().count() > 8:
+                                sf_qq = stats.probplot(sf_total_series.dropna().values, dist="norm")
+                                sf_fig_qq = go.Figure()
+                                sf_fig_qq.add_trace(go.Scatter(
+                                    x=sf_qq[0][0], y=sf_qq[0][1], mode="markers",
+                                    name="Observations",
+                                    marker=dict(color=RED, size=5, opacity=0.7),
+                                ))
+                                sf_fig_qq.add_trace(go.Scatter(
+                                    x=sf_qq[0][0],
+                                    y=sf_qq[1][0] * np.array(sf_qq[0][0]) + sf_qq[1][1],
+                                    mode="lines", name="Normal Reference Line",
+                                    line=dict(color=NAVY, width=2),
+                                ))
+                                sf_fig_qq.update_layout(
+                                    title="Q-Q Plot (Normality Check)",
+                                    xaxis_title="Theoretical Quantiles",
+                                    yaxis_title="Sample Quantiles",
+                                )
+                                show_chart(sf_fig_qq, 320)
+
+                        with sf_dist_r:
+                            sf_rpt = normality_report(sf_total_series)
+                            if sf_rpt:
+                                sf_is_norm = sf_rpt["p"] > 0.05
+                                sf_skew_dir = "Right-skewed (+)" if sf_rpt["skew"] > 0 else "Left-skewed (−)"
+                                sf_kurt_lbl = "Leptokurtic" if sf_rpt["kurt"] > 0 else "Platykurtic"
+                                if sf_rpt["skew"] > 0.5:
+                                    sf_tip = "⚠️ Right skew: scores cluster low. Consider <strong>adding marks</strong>."
+                                elif sf_rpt["skew"] < -0.5:
+                                    sf_tip = "⚠️ Left skew: scores cluster high. Consider <strong>deducting marks</strong>."
+                                else:
+                                    sf_tip = "✅ Distribution is reasonably symmetric."
+
+                                st.markdown(f"""
+<div class="kpi {'s' if sf_is_norm else 'd'}">
+  <div class="kl">Normality ({sf_rpt['test']})</div>
+  <div class="kv">{'Normal ✓' if sf_is_norm else 'Non-Normal ✗'}</div>
+  <div class="ks">p = {sf_rpt['p']:.4f} &nbsp;|&nbsp; n = {sf_rpt['n']:,}</div>
+</div><br/>
+<div class="kpi g">
+  <div class="kl">Skewness</div>
+  <div class="kv">{sf_rpt['skew']:.3f}</div>
+  <div class="ks">{sf_skew_dir}</div>
+</div><br/>
+<div class="kpi w">
+  <div class="kl">Excess Kurtosis</div>
+  <div class="kv">{sf_rpt['kurt']:.3f}</div>
+  <div class="ks">{sf_kurt_lbl}</div>
+</div><br/>
+<div class="kpi n">
+  <div class="kl">Mean &nbsp;|&nbsp; Std Dev</div>
+  <div class="kv">{sf_rpt['mean']:.2f}</div>
+  <div class="ks">σ = {sf_rpt['std']:.2f}</div>
+</div><br/>
+<div class="kpi i">
+  <div class="kl">Range</div>
+  <div class="kv">{sf_rpt['min']:.1f} – {sf_rpt['max']:.1f}</div>
+  <div class="ks">min – max total score</div>
+</div>
+""", unsafe_allow_html=True)
+                                st.markdown("<br/>", unsafe_allow_html=True)
+                                st.markdown(
+                                    f'<div class="callout">{sf_tip}</div>',
+                                    unsafe_allow_html=True,
+                                )
+
+                        # ── 3f. Score Adjustment ──────────────────────────────
+                        sec(f"Score Adjustment (modifying `{sf_afld}`)")
+                        st.markdown(
+                            '<div class="callout">Two adjustment modes are available. '
+                            "<strong>Uniform shift</strong> adds or subtracts a fixed number of "
+                            "marks from every student's adjustment target column. "
+                            "<strong>Band-based adjustment</strong> lets you apply different "
+                            "deltas to different score ranges. Only the adjustment target column "
+                            "is modified; the total is recalculated automatically.</div>",
+                            unsafe_allow_html=True,
+                        )
+                        st.markdown("<br/>", unsafe_allow_html=True)
+
+                        # Statistical recommendation
+                        sf_rpt_pre = normality_report(df_sfm["_total_score"])
+                        if sf_rpt_pre:
+                            sf_sug = suggest_adjustment(sf_rpt_pre)
+                            sf_is_norm_pre = sf_rpt_pre["p"] > 0.05
+
+                            if abs(sf_rpt_pre["skew"]) < 0.3:
+                                sf_rec_html = (
+                                    '<div class="callout-success">'
+                                    "📐 <strong>Distribution looks symmetric</strong> — skewness = "
+                                    f"<strong>{sf_rpt_pre['skew']:.3f}</strong>. "
+                                    "No adjustment is strictly necessary."
+                                    "</div>"
+                                )
+                            else:
+                                sf_arrow = "➕" if sf_sug["direction"] == "add" else "➖"
+                                sf_rec_html = (
+                                    f'<div class="{"callout-warn" if not sf_is_norm_pre else "callout"}">'
+                                    f"📐 <strong>Statistical recommendation:</strong> "
+                                    f"The distribution is <strong>{'right' if sf_rpt_pre['skew'] > 0 else 'left'}-skewed</strong> "
+                                    f"(skewness = {sf_rpt_pre['skew']:.3f}, σ = {sf_rpt_pre['std']:.2f}). "
+                                    f"Suggest <strong>{sf_arrow} {sf_sug['suggested']} marks</strong> uniformly "
+                                    f"(projected mean: <strong>{sf_sug['proj_mean']}</strong>, "
+                                    f"estimated skew reduction: ~{abs(sf_sug['proj_skew_δ']):.2f})."
+                                    "</div>"
+                                )
+                            st.markdown(sf_rec_html, unsafe_allow_html=True)
+                            st.markdown("<br/>", unsafe_allow_html=True)
+
+                            sf_rk1, sf_rk2, sf_rk3, sf_rk4, sf_rk5 = st.columns(5)
+                            with sf_rk1: kpi("Current Mean",   f"{sf_rpt_pre['mean']:.2f}", "total score", "n")
+                            with sf_rk2: kpi("Std Deviation",  f"{sf_rpt_pre['std']:.2f}",  "", "i")
+                            with sf_rk3: kpi("Skewness",       f"{sf_rpt_pre['skew']:.3f}", "right(+) / left(−)", "w" if abs(sf_rpt_pre["skew"]) > 0.5 else "s")
+                            with sf_rk4: kpi("Suggested Shift", f"{'+ ' if sf_sug['direction'] == 'add' else '− '}{sf_sug['suggested']}", sf_sug["direction"] + " marks", "g")
+                            with sf_rk5: kpi("Projected Mean", f"{sf_sug['proj_mean']:.2f}", "after suggestion applied", "n")
+                        else:
+                            sf_sug = {"direction": "add", "sign": 1, "suggested": 2.0}
+
+                        st.markdown("<br/>", unsafe_allow_html=True)
+
+                        sf_adj_mode = st.radio(
+                            "Adjustment mode",
+                            ["📏 Uniform shift (all students)", "🎯 Band-based (by score range)"],
+                            horizontal=True,
+                            key="t3_adj_mode",
+                        )
+
+                        # ════════════════════════════════════════════════════
+                        #  MODE A – Uniform shift
+                        # ════════════════════════════════════════════════════
+                        if "Uniform" in sf_adj_mode:
+                            sf_ua1, sf_ua2, sf_ua3 = st.columns([1, 1, 1])
+                            with sf_ua1:
+                                sf_u_dir = st.radio(
+                                    "Direction",
+                                    ["➕ Add marks", "➖ Deduct marks"],
+                                    index=0 if sf_sug["direction"] == "add" else 1,
+                                    horizontal=True,
+                                    key="t3_u_dir",
+                                )
+                            with sf_ua2:
+                                sf_u_amt = st.number_input(
+                                    "Amount (marks)",
+                                    min_value=0.0, max_value=50.0,
+                                    value=float(sf_sug["suggested"]),
+                                    step=0.5,
+                                    key="t3_u_amt",
+                                )
+                            with sf_ua3:
+                                st.markdown("<br/>", unsafe_allow_html=True)
+                                sf_do_uniform = st.button(
+                                    "⚡ Apply Uniform Shift",
+                                    key="t3_apply_uniform",
+                                )
+
+                            if sf_do_uniform and sf_u_amt > 0:
+                                sf_sign_u = 1 if "Add" in sf_u_dir else -1
+                                df_sf_upd = df_sfm.copy()
+                                df_sf_upd[sf_afld] = (
+                                    pd.to_numeric(df_sf_upd[sf_afld], errors="coerce")
+                                    + sf_sign_u * sf_u_amt
+                                ).clip(lower=0)
+                                df_sf_upd["_total_score"] = df_sf_upd[sf_tcols].apply(
+                                    lambda r: pd.to_numeric(r, errors="coerce").sum(), axis=1
+                                )
+                                sfm["df"] = df_sf_upd
+                                st.session_state[sf_state_key] = sfm
+                                df_sfm = df_sf_upd
+
+                                sf_orig = sfm.get("original_df", df_sf_upd)
+                                sf_bef = pd.to_numeric(sf_orig["_total_score"],  errors="coerce").dropna()
+                                sf_aft = pd.to_numeric(df_sf_upd["_total_score"], errors="coerce").dropna()
+
+                                st.markdown('<div class="chart-wrap">', unsafe_allow_html=True)
+                                sf_cmp = go.Figure()
+                                sf_cmp.add_trace(go.Histogram(x=sf_bef, nbinsx=30, name="Before", marker_color=MUTED, opacity=0.65))
+                                sf_cmp.add_trace(go.Histogram(x=sf_aft, nbinsx=30, name="After",  marker_color=RED,  opacity=0.78))
+                                sf_cmp.update_layout(barmode="overlay", title="Total Score Distribution: Before vs After Uniform Shift", xaxis_title="Total Score", yaxis_title="Count")
+                                st.plotly_chart(apply_chart_theme(sf_cmp, 340), use_container_width=True, config={"displayModeBar": False})
+                                st.markdown("</div>", unsafe_allow_html=True)
+
+                                sf_rpt_aft = normality_report(df_sf_upd["_total_score"])
+                                if sf_rpt_aft:
+                                    sf_n_aft = sf_rpt_aft["p"] > 0.05
+                                    st.markdown(
+                                        f'<div class="{"callout-success" if sf_n_aft else "callout-warn"}">'
+                                        f"After shift: mean = <strong>{sf_rpt_aft['mean']:.2f}</strong> · "
+                                        f"skewness = <strong>{sf_rpt_aft['skew']:.3f}</strong> · "
+                                        f"p = <strong>{sf_rpt_aft['p']:.4f}</strong> "
+                                        f"({'Normal ✓' if sf_n_aft else 'Non-Normal ✗'})</div>",
+                                        unsafe_allow_html=True,
+                                    )
+
+                                st.markdown("<br/>", unsafe_allow_html=True)
+                                sec("Grade Distribution: Before vs After Uniform Shift")
+                                _render_grade_comparison(
+                                    pd.to_numeric(sf_orig["_total_score"],    errors="coerce").apply(score_to_grade),
+                                    pd.to_numeric(df_sf_upd["_total_score"], errors="coerce").apply(score_to_grade),
+                                    sf_afld, sf_tcols, sfm, sf_state_key,
+                                )
+
+                        # ════════════════════════════════════════════════════
+                        #  MODE B – Band-based adjustment
+                        # ════════════════════════════════════════════════════
+                        else:
+                            sf_ts_min = float(pd.to_numeric(df_sfm["_total_score"], errors="coerce").min())
+                            sf_ts_max = float(pd.to_numeric(df_sfm["_total_score"], errors="coerce").max())
+
+                            st.markdown(
+                                '<div class="callout">'
+                                f"Total scores range from <strong>{sf_ts_min:.1f}</strong> to "
+                                f"<strong>{sf_ts_max:.1f}</strong>. "
+                                "Define up to <strong>5 score bands</strong> and assign a separate "
+                                "mark delta to each.</div>",
+                                unsafe_allow_html=True,
+                            )
+                            st.markdown("<br/>", unsafe_allow_html=True)
+
+                            sf_n_bands = st.slider("Number of score bands", 1, 5, 3, 1, key="t3_n_bands")
+                            sf_band_defs = []
+                            sf_hdr = st.columns([2, 2, 2, 2, 2])
+                            sf_hdr[0].markdown("**Band**")
+                            sf_hdr[1].markdown("**Lower bound (≥)**")
+                            sf_hdr[2].markdown("**Upper bound (<)**")
+                            sf_hdr[3].markdown("**Direction**")
+                            sf_hdr[4].markdown("**Marks**")
+
+                            sf_step = (sf_ts_max - sf_ts_min) / max(sf_n_bands, 1)
+                            for i in range(sf_n_bands):
+                                sf_lo_def = round(sf_ts_min + i * sf_step, 1)
+                                sf_hi_def = round(sf_ts_min + (i + 1) * sf_step, 1)
+                                sf_bc = st.columns([2, 2, 2, 2, 2])
+                                sf_bc[0].markdown(f"<div style='padding-top:.6rem;font-weight:700;color:{NAVY}'>Band {i+1}</div>", unsafe_allow_html=True)
+                                sf_lo  = sf_bc[1].number_input(f"sfLo{i}", min_value=0.0, max_value=500.0, value=sf_lo_def, step=1.0, label_visibility="collapsed", key=f"t3_band_lo_{i}")
+                                sf_hi  = sf_bc[2].number_input(f"sfHi{i}", min_value=0.0, max_value=500.0, value=sf_hi_def, step=1.0, label_visibility="collapsed", key=f"t3_band_hi_{i}")
+                                sf_dir = sf_bc[3].selectbox(f"sfDir{i}", ["➕ Add", "➖ Deduct"], label_visibility="collapsed", key=f"t3_band_dir_{i}")
+                                sf_dlt = sf_bc[4].number_input(f"sfDlt{i}", min_value=0.0, max_value=50.0, value=0.0, step=0.5, label_visibility="collapsed", key=f"t3_band_delta_{i}")
+                                sf_band_defs.append((sf_lo, sf_hi, (1 if "Add" in sf_dir else -1) * sf_dlt))
+
+                            st.markdown("<br/>", unsafe_allow_html=True)
+                            sf_ts_ser = pd.to_numeric(df_sfm["_total_score"], errors="coerce")
+                            sf_prev_cols = st.columns(sf_n_bands)
+                            for i, (lo, hi, delta) in enumerate(sf_band_defs):
+                                cnt_b = int(((sf_ts_ser >= lo) & (sf_ts_ser < hi)).sum())
+                                with sf_prev_cols[i]:
+                                    kpi(f"Band {i+1} ({lo:.0f}–{hi:.0f})", f"{cnt_b:,}", f"{'+ ' if delta >= 0 else '− '}{abs(delta):.1f} marks", "g" if delta > 0 else ("d" if delta < 0 else "n"))
+
+                            st.markdown("<br/>", unsafe_allow_html=True)
+                            sf_do_band = st.button("⚡ Apply Band-Based Adjustment", key="t3_apply_band")
+
+                            if sf_do_band:
+                                df_sf_upd = df_sfm.copy()
+                                sf_ts_ref = pd.to_numeric(df_sf_upd["_total_score"], errors="coerce")
+                                for lo, hi, delta in sf_band_defs:
+                                    if delta == 0:
+                                        continue
+                                    sf_mb = (sf_ts_ref >= lo) & (sf_ts_ref < hi)
+                                    df_sf_upd.loc[sf_mb, sf_afld] = (
+                                        pd.to_numeric(df_sf_upd.loc[sf_mb, sf_afld], errors="coerce") + delta
+                                    ).clip(lower=0)
+                                df_sf_upd["_total_score"] = df_sf_upd[sf_tcols].apply(
+                                    lambda r: pd.to_numeric(r, errors="coerce").sum(), axis=1
+                                )
+                                sfm["df"] = df_sf_upd
+                                st.session_state[sf_state_key] = sfm
+                                df_sfm = df_sf_upd
+
+                                sf_orig = sfm.get("original_df", df_sf_upd)
+                                sf_bef_b = pd.to_numeric(sf_orig["_total_score"],   errors="coerce").dropna()
+                                sf_aft_b = pd.to_numeric(df_sf_upd["_total_score"], errors="coerce").dropna()
+
+                                st.markdown('<div class="chart-wrap">', unsafe_allow_html=True)
+                                sf_cmp_b = go.Figure()
+                                sf_cmp_b.add_trace(go.Histogram(x=sf_bef_b, nbinsx=30, name="Before", marker_color=MUTED, opacity=0.65))
+                                sf_cmp_b.add_trace(go.Histogram(x=sf_aft_b, nbinsx=30, name="After",  marker_color=RED,  opacity=0.78))
+                                sf_cmp_b.update_layout(barmode="overlay", title="Total Score Distribution: Before vs After Band Adjustment", xaxis_title="Total Score", yaxis_title="Count")
+                                st.plotly_chart(apply_chart_theme(sf_cmp_b, 340), use_container_width=True, config={"displayModeBar": False})
+                                st.markdown("</div>", unsafe_allow_html=True)
+
+                                sf_rpt_b = normality_report(df_sf_upd["_total_score"])
+                                if sf_rpt_b:
+                                    sf_n_b = sf_rpt_b["p"] > 0.05
+                                    st.markdown(
+                                        f'<div class="{"callout-success" if sf_n_b else "callout-warn"}">'
+                                        f"After band adjustment: mean = <strong>{sf_rpt_b['mean']:.2f}</strong> · "
+                                        f"skewness = <strong>{sf_rpt_b['skew']:.3f}</strong> · "
+                                        f"p = <strong>{sf_rpt_b['p']:.4f}</strong> "
+                                        f"({'Normal ✓' if sf_n_b else 'Non-Normal ✗'})</div>",
+                                        unsafe_allow_html=True,
+                                    )
+
+                                st.markdown("<br/>", unsafe_allow_html=True)
+                                sec("Grade Distribution: Before vs After Band Adjustment")
+                                _render_grade_comparison(
+                                    pd.to_numeric(sf_orig["_total_score"],   errors="coerce").apply(score_to_grade),
+                                    pd.to_numeric(df_sf_upd["_total_score"], errors="coerce").apply(score_to_grade),
+                                    sf_afld, sf_tcols, sfm, sf_state_key,
+                                )
+
+                        # ── 3g. Preview & Download ────────────────────────────
+                        sec("Moderated Grade Sheet — Preview")
+                        st.dataframe(df_sfm, use_container_width=True, hide_index=True)
+                        st.caption(f"{len(df_sfm):,} rows · Total score column: `_total_score`")
+                        st.markdown("<br/>", unsafe_allow_html=True)
+                        st.download_button(
+                            label="⬇️  Download Moderated Grade Sheet",
+                            data=to_csv_bytes(df_sfm),
+                            file_name="moderated_gradesheet.csv",
+                            mime="text/csv",
+                            key="t3_download_btn",
+                        )
