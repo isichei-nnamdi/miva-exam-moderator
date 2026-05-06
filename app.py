@@ -1937,18 +1937,54 @@ with tab3:
                     sf_state_key = f"_sfmod_{sf_ck}_{'_'.join(sf_agg_fields)}_{sf_adj_field}"
 
                     # ── 3c. Compute totals ────────────────────────────────────
+                    # if sf_run_btn:
+                    #     df_sfm = df_sf.copy()
+                    #     sf_total_cols = list(dict.fromkeys(sf_agg_fields))
+                    #     df_sfm["_total_score"] = df_sfm[sf_total_cols].apply(
+                    #         lambda r: pd.to_numeric(r, errors="coerce").sum(), axis=1
+                    #     )
+                    #     st.session_state[sf_state_key] = {
+                    #         "df":          df_sfm,
+                    #         "original_df": df_sfm.copy(),
+                    #         "agg_fields":  sf_agg_fields,
+                    #         "adj_field":   sf_adj_field,
+                    #         "total_cols":  sf_total_cols,
+                    #     }
                     if sf_run_btn:
-                        df_sfm = df_sf.copy()
-                        sf_total_cols = list(dict.fromkeys(sf_agg_fields))
+                        sf_total_cols  = list(dict.fromkeys(sf_agg_fields))
+                        df_sfm_raw     = df_sf.copy()
+
+                        # Coerce selected columns to numeric first so that
+                        # non-numeric placeholders (e.g. "-", "N/A") become NaN
+                        for _c in sf_total_cols:
+                            df_sfm_raw[_c] = pd.to_numeric(df_sfm_raw[_c], errors="coerce")
+
+                        # Capture per-column attempt stats BEFORE dropping rows
+                        sf_attempt_stats = {
+                            col: {
+                                "attempted":     int(df_sfm_raw[col].notna().sum()),
+                                "not_attempted": int(df_sfm_raw[col].isna().sum()),
+                            }
+                            for col in sf_total_cols
+                        }
+                        sf_total_enrolled = len(df_sfm_raw)
+
+                        # Drop rows with ANY missing value in the selected columns
+                        df_sfm = df_sfm_raw.dropna(subset=sf_total_cols).copy()
+                        sf_dropped = sf_total_enrolled - len(df_sfm)
+
                         df_sfm["_total_score"] = df_sfm[sf_total_cols].apply(
                             lambda r: pd.to_numeric(r, errors="coerce").sum(), axis=1
                         )
                         st.session_state[sf_state_key] = {
-                            "df":          df_sfm,
-                            "original_df": df_sfm.copy(),
-                            "agg_fields":  sf_agg_fields,
-                            "adj_field":   sf_adj_field,
-                            "total_cols":  sf_total_cols,
+                            "df":              df_sfm,
+                            "original_df":     df_sfm.copy(),
+                            "agg_fields":      sf_agg_fields,
+                            "adj_field":       sf_adj_field,
+                            "total_cols":      sf_total_cols,
+                            "enrolled":        sf_total_enrolled,
+                            "dropped":         sf_dropped,
+                            "attempt_stats":   sf_attempt_stats,
                         }
 
                     if sf_state_key in st.session_state:
@@ -1957,13 +1993,88 @@ with tab3:
                         sf_tcols  = sfm["total_cols"]
                         sf_afld   = sfm["adj_field"]
 
+                        # st.markdown(
+                        #     f'<div class="callout-success">✅ Totals computed for '
+                        #     f"<strong>{len(df_sfm):,}</strong> students across "
+                        #     f"<strong>{len(sf_agg_fields)}</strong> assessment columns. "
+                        #     f"Adjustment target: <code>{sf_afld}</code>.</div>",
+                        #     unsafe_allow_html=True,
+                        # )
+                        sf_enrolled      = sfm.get("enrolled", len(df_sfm))
+                        sf_dropped       = sfm.get("dropped", 0)
+                        sf_attempt_stats = sfm.get("attempt_stats", {})
+
                         st.markdown(
                             f'<div class="callout-success">✅ Totals computed for '
-                            f"<strong>{len(df_sfm):,}</strong> students across "
-                            f"<strong>{len(sf_agg_fields)}</strong> assessment columns. "
-                            f"Adjustment target: <code>{sf_afld}</code>.</div>",
+                            f"<strong>{len(df_sfm):,}</strong> students with complete records "
+                            f"across <strong>{len(sf_agg_fields)}</strong> assessment columns. "
+                            f"<strong>{sf_dropped:,}</strong> row(s) with incomplete data were "
+                            f"excluded. Adjustment target: <code>{sf_afld}</code>.</div>",
                             unsafe_allow_html=True,
                         )
+
+                        # ── Enrolment & Attempt Summary ───────────────────────
+                        sec("Enrolment & Attempt Summary")
+
+                        # Top-level cohort cards
+                        sf_ov1, sf_ov2, sf_ov3 = st.columns(3)
+                        with sf_ov1:
+                            kpi("Total Enrolled", f"{sf_enrolled:,}",
+                                "rows in uploaded grade sheet", "n")
+                        with sf_ov2:
+                            kpi("Complete Records", f"{len(df_sfm):,}",
+                                "all selected columns present — used for moderation", "s")
+                        with sf_ov3:
+                            kpi("Incomplete Records", f"{sf_dropped:,}",
+                                "missing ≥1 selected column — excluded from moderation",
+                                "d" if sf_dropped > 0 else "n")
+
+                        st.markdown("<br/>", unsafe_allow_html=True)
+
+                        # Per-assessment-column attempt cards
+                        # Render in rows of 4 to avoid cards becoming too narrow
+                        if sf_attempt_stats:
+                            st.markdown(
+                                '<div class="callout">The cards below show, for each selected '
+                                "assessment column, how many students submitted a score and how "
+                                "many did not. Empty cells in any column cause that student's "
+                                "entire row to be excluded from moderation.</div>",
+                                unsafe_allow_html=True,
+                            )
+                            st.markdown("<br/>", unsafe_allow_html=True)
+
+                            cols_per_row = 4
+                            stat_items   = list(sf_attempt_stats.items())
+                            for row_start in range(0, len(stat_items), cols_per_row):
+                                row_items = stat_items[row_start: row_start + cols_per_row]
+                                row_cols  = st.columns(len(row_items))
+                                for rc, (col_name, s) in zip(row_cols, row_items):
+                                    attempted     = s["attempted"]
+                                    not_attempted = s["not_attempted"]
+                                    pct_att = (
+                                        f"{attempted / sf_enrolled * 100:.1f}% attempted"
+                                        if sf_enrolled else "—"
+                                    )
+                                    # Truncate long column names for the card label
+                                    display_name = (
+                                        col_name if len(col_name) <= 22
+                                        else col_name[:20] + "…"
+                                    )
+                                    with rc:
+                                        st.markdown(
+                                            f'<div class="kpi {"s" if not_attempted == 0 else "w"}">'
+                                            f'  <div class="kl" title="{col_name}">{display_name}</div>'
+                                            f'  <div class="kv">{attempted:,}</div>'
+                                            f'  <div class="ks">{pct_att}</div>'
+                                            f'  <div class="ks" style="margin-top:.35rem;'
+                                            f'border-top:1px solid #eee;padding-top:.3rem;">'
+                                            f'    <span style="color:#C0392B;font-weight:700;">'
+                                            f'    {not_attempted:,}</span> did not attempt'
+                                            f'  </div>'
+                                            f'</div>',
+                                            unsafe_allow_html=True,
+                                        )
+                                st.markdown("<br/>", unsafe_allow_html=True)
 
                         # ── 3d. Grade Distribution (Pre-Adjustment) ───────────
                         sec("Grade Distribution (Pre-Adjustment)")
