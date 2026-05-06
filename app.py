@@ -2427,10 +2427,19 @@ with tab3:
                         st.dataframe(df_sfm, use_container_width=True, hide_index=True)
                         st.caption(f"{len(df_sfm):,} rows · Total score column: `_total_score`")
                         st.markdown("<br/>", unsafe_allow_html=True)
+                        # st.download_button(
+                        #     label="⬇️  Download Moderated Grade Sheet",
+                        #     data=to_csv_bytes(df_sfm),
+                        #     file_name="moderated_gradesheet.csv",
+                        #     mime="text/csv",
+                        #     key="t3_download_btn",
+                        # )
+                        sf_base_name = os.path.splitext(sf_file.name)[0]
+                        sf_download_name = f"{sf_base_name}_moderated_gradesheet.csv"
                         st.download_button(
                             label="⬇️  Download Moderated Grade Sheet",
                             data=to_csv_bytes(df_sfm),
-                            file_name="moderated_gradesheet.csv",
+                            file_name=sf_download_name,
                             mime="text/csv",
                             key="t3_download_btn",
                         )
